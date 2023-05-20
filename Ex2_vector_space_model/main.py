@@ -87,7 +87,7 @@ for doc in docs:
         else:
             idf[word] = 1
 for word in idf:
-    idf[word] = math.log(len(docs) / idf[word])
+    idf[word] = 1 + (math.log(len(docs) / idf[word]))
 
 # Tính TF-IDF
 tfidf = []

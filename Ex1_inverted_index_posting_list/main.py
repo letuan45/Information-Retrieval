@@ -94,7 +94,7 @@ for j, query in enumerate(queries):
                 res = [a and b for a, b in zip(res, inc_matrix[i])]
     res = np.array(res)
     result = find_indices_of_value(res, 1)
-    print("Query", j+1, ": ", result)
+    #print("Query", j+1, ": ", result)
 
 ######### GIAI ĐOẠN 4: CHỈ MỤC NGƯỢC ############
 # Khởi tạo Inverted Index
@@ -110,7 +110,7 @@ for i in range(0, len(docs), 1):
         inverted_index[word].add(i+1)
 
 # Inverted Index sẽ có dạng {'từ khóa': {tài liệu 1, tài liệu 2, ...}}
-# print(inverted_index)
+print(inverted_index["measurement"])
 
 #Giao với bước nhảy (skip pointer)
 def intersection_has_skip(set1, set2, hasSkip, steps):
@@ -161,7 +161,7 @@ for query_index in range(0, len(queries)):
             #result = intersection_has_skip(result, inverted_index[keyword], hasSkip, steps)
             result = result.intersection(inverted_index[keyword])
     
-    print(query_index+1, result);
+    #print(query_index+1, result);
 
 
 ######### GIAI ĐOẠN 5: CHỈ MỤC NGƯỢC TỐI ƯU############
@@ -184,4 +184,4 @@ for query_index in range(0, len(queries)):
             if doc_id in postings_list:
                 new_results.add(doc_id)
         results = new_results
-    print(query_index+1,results);
+    #print(query_index+1,results);

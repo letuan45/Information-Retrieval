@@ -19,20 +19,23 @@ def remove_stopwords(documents):
     filtered_documents = []
     for doc in documents:
         words = nltk.word_tokenize(doc)
-        filtered_words = [word for word in words if word.lower() not in stop_words]
+        filtered_words = [
+            word for word in words if word.lower() not in stop_words]
         filtered_documents.append(' '.join(filtered_words))
     return filtered_documents
 
-#Tìm 1 item trong list 2 chiều, trả về số cột
 def find_indices_of_value(lst, value):
+    '''
+    Tìm 1 item trong list 2 chiều, trả về số cột
+    '''
     indices = []
     for i in range(len(lst)):
         if lst[i] == value:
-            indices.append(i+1) #index + 1 là STT của tài liệu
+            indices.append(i+1)  # index + 1 là STT của tài liệu
     return indices
 
 ######### GIAI ĐOẠN 1: CHUẨN HÓA INPUT #########
-# Mục tiêu: Xóa bỏ kí tự khoảng trắng thừa, kí tự đặc biệt, số, 
+# Mục tiêu: Xóa bỏ kí tự khoảng trắng thừa, kí tự đặc biệt, số,
 # Biến đổi lowercase
 def read_file_and_modify(filename):
     with open('./npl/' + filename, 'r') as f:
@@ -42,146 +45,199 @@ def read_file_and_modify(filename):
         if char not in "\n":
             clean_text += char
     text = text.strip()  # loại bỏ khoảng trắng thừa ở đầu và cuối văn bản
-    words = text.split()  # tách văn bản thành các từ và loại bỏ khoảng trắng thừa giữa 
-    #các từ
+    words = text.split()  # tách văn bản thành các từ và loại bỏ khoảng trắng thừa giữa
+    # các từ
     words = " ".join(words)
-    clean_text = re.sub(r'\d+', '', words) #loại bỏ số
+    clean_text = re.sub(r'\d+', '', words)  # loại bỏ số
 
-    #loại bỏ khoảng trắng thừa ở đầu và cuối câu
-    #Tách từng văn bản thành list
+    # loại bỏ khoảng trắng thừa ở đầu và cuối câu
+    # Tách từng văn bản thành list
     clean_text = clean_text.split("/")
     for i in range(len(clean_text)):
         clean_text[i] = clean_text[i].strip().lower()
     return clean_text
 
+
 ######### GIAI ĐOẠN 2: CHUẨN HÓA DỮ LIỆU #########
 docs = read_file_and_modify("doc-text")
-queries = read_file_and_modify("query-text") 
-#phần tử cuối là rỗng, nên bỏ
+queries = read_file_and_modify("query-text")
+# phần tử cuối là rỗng, nên bỏ
 queries = queries[:-1]
 # Filter stop words
 docs = remove_stopwords(docs)
 queries = remove_stopwords(queries)
 
 ######## GIAI ĐOẠN 3: MA TRẬN ĐÁNH DẤU #########
-#Sắp xếp lại các từ có trong từ điển
-vocabulary = set()
-for doc in docs:
-    words = doc.split()
-    vocabulary.update(words)
-vocabulary = sorted(list(vocabulary))
+def get_sorted_vocabulary(docs):
+    '''
+    Sắp xếp lại các từ có trong từ điển
+    '''
+    vocabulary = set()
+    for doc in docs:
+        words = doc.split()
+        vocabulary.update(words)
+    return sorted(list(vocabulary))
 
-# Ma trận đánh dấu
-inc_matrix = np.zeros((len(vocabulary), len(docs)))
-for j, doc in enumerate(docs):
-    words = doc.split()
-    for i, word in enumerate(vocabulary):
-        if word in words:
-            inc_matrix[i, j] = 1
 
-# In ma trận đánh dấu
-#print(inc_matrix)
+def buld_incidence_matrix(sorted_vocabulary, docs):
+    '''
+    Xây dựng ma trận đánh dấu
+    '''
+    inc_matrix = np.zeros((len(sorted_vocabulary), len(docs)))
+    for j, doc in enumerate(docs):
+        words = doc.split()
+        for i, word in enumerate(sorted_vocabulary):
+            if word in words:
+                inc_matrix[i, j] = 1
+    return inc_matrix
 
-# Truy vấn
-for j, query in enumerate(queries):
-    res = None
-    for i, word in enumerate(vocabulary):
-        if word in query.split():
-            #lấy phần tử ma trận đánh dấu tương ứng để AND
-            if(res is None):
-                res = inc_matrix[i]
-            else:
-                res = [a and b for a, b in zip(res, inc_matrix[i])]
-    res = np.array(res)
-    result = find_indices_of_value(res, 1)
-    #print("Query", j+1, ": ", result)
+def query_with_inc_matrix(queries, sorted_vocabulary, inc_matrix):
+    '''
+    Truy vấn với ma trận đánh dấu
+    '''
+    for j, query in enumerate(queries):
+        res = None
+        for i, word in enumerate(sorted_vocabulary):
+            if word in query.split():
+                # lấy phần tử ma trận đánh dấu tương ứng để AND
+                if (res is None):
+                    res = inc_matrix[i]
+                else:
+                    res = [a and b for a, b in zip(res, inc_matrix[i])]
+        res = np.array(res)
+        result = find_indices_of_value(res, 1)
+        print("Query", j+1, ": ", result)
+
+# sorted_vocabulary = get_sorted_vocabulary(docs)
+# inc_matrix = buld_incidence_matrix(sorted_vocabulary, docs)
+# query_with_inc_matrix(queries, sorted_vocabulary, inc_matrix)
 
 ######### GIAI ĐOẠN 4: CHỈ MỤC NGƯỢC ############
-# Khởi tạo Inverted Index
-inverted_index = {}
-for i in range(0, len(docs), 1):
-    #Tách từ thành list
-    words = docs[i].lower().split()
-    for word in words:
-        #Nếu từ không nằm trong chỉ mục, convert sang set để tránh tình
-        #trạng bị trùng phần từ sau khi add
-        if word not in inverted_index:
-            inverted_index[word] = set()
-        inverted_index[word].add(i+1)
+def create_inverted_index(docs):
+    '''
+    Khởi tạo Inverted Index từ các docs
+    Inverted Index sẽ có dạng {'từ khóa': [tài liệu 1, tài liệu 2, ...]}
+    '''
+    inverted_index = {}
+    for i in range(0, len(docs), 1):
+        words = docs[i].lower().split()
+        for word in words:
+            if word not in inverted_index:
+                inverted_index[word] = []
+            if (i+1) not in inverted_index[word]:
+                inverted_index[word].append(i+1)
+    return inverted_index
 
-# Inverted Index sẽ có dạng {'từ khóa': {tài liệu 1, tài liệu 2, ...}}
-print(inverted_index["measurement"])
-
-#Giao với bước nhảy (skip pointer)
-def intersection_has_skip(set1, set2, hasSkip, steps):
-    res = set()
-    lst1 = sorted(set1)
-    lst2 = sorted(set2)
-    i = 0
-    j = 0
-    
-    while i < len(lst1) and j < len(lst2):
-        if lst1[i] == lst2[j]:
-            res.add(lst1[i])
-            i += steps[0] if hasSkip(i) else 1
-            j += steps[1] if hasSkip(j) else 1
-        elif lst1[i] < lst2[j]:
-            i += steps[0] if hasSkip(i) else 1
+def intersection(posting_list_1, posting_list_2):
+    '''
+    Giao 2 posting list (list)
+    '''
+    result = []
+    p1, p2 = 0,0
+    posting_size_1 = len(posting_list_1)
+    posting_size_2 = len(posting_list_2)
+    while(p1 < posting_size_1 and p2 < posting_size_2):
+        if posting_list_1[p1] == posting_list_2[p2]:
+            result.append(posting_list_1[p1])
+            p1 += 1
+            p2 += 1
+        elif posting_list_1[p1] < posting_list_2[p2]:
+            p1 += 1
         else:
-            j += steps[1] if hasSkip(j) else 1
-            
-    return res
+            p2 += 1
+    return result
 
-# Truy vấn
-# Truy vấn Inverted Index với bước nhảy step
-hasSkip = lambda i: i % 2 == 0 #lamda function xác định skip với giá trị chẵn
+def has_skip(skip_step, list_length):
+    def checker(pointer):
+        return (skip_step + pointer) < list_length
+    return checker
 
-def hasSkipWithThirdIndex(i):
-    return (i+1) % 3 == 0
+def intersection_with_skip_pointer(posting_list_1, posting_list_2, step = 1):
+    '''
+    Giao 2 posting list (list) với skip pointer
+    '''
+    result = []
+    p1, p2 = 0, 0
+    posting_size_1 = len(posting_list_1)
+    posting_size_2 = len(posting_list_2)
 
-def hasSkipCustom(i): #skip qua index chẵn và chia hết cho 3,           
-    return i % 2 == i % 3 #tương tự với không chi hết
+    has_skip_l1 = has_skip(step, posting_size_1)
+    has_skip_l2 = has_skip(step, posting_size_2)
 
-steps = (2, 1) #Nhảy với step = 2 với list đầu và step = 1 với list thứ hai
-for query_index in range(0, len(queries)):
-    keywords = queries[query_index].split()
-    result = None
-    for keyword in keywords:
-        #Nếu từ khóa trong query không nằm trong chỉ mục, chuyển hóa về set
-        #và dừng vòng lặp
-        if keyword not in inverted_index:
-            result = set()
-            break
-        # Gán giá trị đầu cho kết quả sau khi tìm ta từ khóa
-        if result is None:
-            result = inverted_index[keyword]
-        # Lấy giao giữa kết quả hiện tại và chỉ mục ngược đang xét
-        else:
-            # Bỏ comment dòng sau nếu chạy với bước nhảy
-            #result = intersection_has_skip(result, inverted_index[keyword], hasSkip, steps)
-            result = result.intersection(inverted_index[keyword])
-    
-    #print(query_index+1, result);
+    while p1 < posting_size_1 and p2 < posting_size_2:
+        if posting_list_1[p1] == posting_list_2[p2]:
+            result.append(posting_list_1[p1])
+            p1 += 1
+            p2 += 1
+        elif posting_list_1[p1] < posting_list_2[p2]:
+            if has_skip_l1(p1) and posting_list_1[p1 + step] <= posting_list_2[p2]:
+                while has_skip_l1(p1) and posting_list_1[p1 + step] <= posting_list_2[p2]:
+                    p1 += step
+            else: p1 += 1
+        else: 
+            if has_skip_l2(p2) and posting_list_2[p2 + step] <= posting_list_1[p1]:
+                while has_skip_l2(p2) and posting_list_2[p2 + step] <= posting_list_1[p1]:
+                    p2 += step
+            else: p2 += 1
+    return result
 
 
-######### GIAI ĐOẠN 5: CHỈ MỤC NGƯỢC TỐI ƯU############
-for query_index in range(0, len(queries)):
-    query = queries[query_index]
-    terms = query.split()
-    # Lấy danh sách thẻ định vị tương ứng với query
-    posting_lists = [inverted_index[term] for term in terms if term in inverted_index]
+def query_with_inv_index(queries, inverted_index):
+    '''
+    Truy vấn với chỉ mục ngược
+    '''
+    for query_index in range(0, len(queries)):
+        query = queries[query_index]
+        query_terms = query.split()
+        result = []
+        choosen_term = ""
+        #Chọn ra posting của từ và từ đầu tiên trong query
+        for term in query_terms:
+            if(term in inverted_index):
+                result = inverted_index[term]
+                choosen_term = term
+                break
+        query_terms.remove(choosen_term)
+        for term in query_terms:
+            posting_2 = []
+            if term in inverted_index:
+                posting_2 = inverted_index[term]
+            if(len(posting_2) > 0):
+                result = intersection(result, posting_2)
+                #uncomment đoạn sau để chạy intersect có bước nhảy
+                #result = intersection_with_skip_pointer(result, posting_2, 3)
+        print(query_index+1, result)
 
-    # Sort danh sách với tần suất xuất hiện df(t)
-    posting_lists.sort(key=len)
 
-    # Gán kết quả cho thẻ định vị đầu tiên (thẻ có ít chỉ mục nhất)
-    results = posting_lists[0]
+def query_with_inv_index_optimize(queries, inverted_index):
+    '''
+    Truy vấn với chỉ mục ngược - tối ưu
+    '''
+    for query_index in range(0, len(queries)):
+        query = queries[query_index]
+        query_terms = query.split()
+        result = []
+        choosen_term = ""
+        # Chọn ra posting, từ có len posting (df) ngắn nhất
+        min_df = len(inverted_index)
+        for term in query_terms:
+            if (term in inverted_index):
+                if min_df > len(inverted_index[term]):
+                    min_df = len(inverted_index[term])
+                    result = inverted_index[term]
+                    choosen_term = term
+        query_terms.remove(choosen_term)
+        for term in query_terms:
+            posting_2 = []
+            if term in inverted_index:
+                posting_2 = inverted_index[term]
+            if (len(posting_2) > 0):
+                result = intersection(result, posting_2)
+                # uncomment đoạn sau để chạy intersect có bước nhảy
+                # result = intersection_with_skip_pointer(result, posting_2, 3)
+        print(query_index+1, result)
 
-    # Giao với phần còn lại
-    for postings_list in posting_lists[1:]:
-        new_results = set()
-        for doc_id in results:
-            if doc_id in postings_list:
-                new_results.add(doc_id)
-        results = new_results
-    #print(query_index+1,results);
+# inverted_index = create_inverted_index(docs)
+# sorted_vocabulary = get_sorted_vocabulary(docs)
+# query_with_inv_index(queries, inverted_index)
+# query_with_inv_index_optimize(queries, inverted_index)

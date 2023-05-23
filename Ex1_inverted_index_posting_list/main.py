@@ -208,7 +208,6 @@ def query_with_inv_index(queries, inverted_index):
                 #result = intersection_with_skip_pointer(result, posting_2, 3)
         print(query_index+1, result)
 
-
 def query_with_inv_index_optimize(queries, inverted_index):
     '''
     Truy vấn với chỉ mục ngược - tối ưu
@@ -218,26 +217,33 @@ def query_with_inv_index_optimize(queries, inverted_index):
         query_terms = query.split()
         result = []
         choosen_term = ""
-        # Chọn ra posting, từ có len posting (df) ngắn nhất
-        min_df = len(inverted_index)
+        query_posting = []
+
+        #Chọn ra inverted index tương ứng query words
         for term in query_terms:
             if (term in inverted_index):
-                if min_df > len(inverted_index[term]):
-                    min_df = len(inverted_index[term])
-                    result = inverted_index[term]
-                    choosen_term = term
-        query_terms.remove(choosen_term)
-        for term in query_terms:
-            posting_2 = []
-            if term in inverted_index:
-                posting_2 = inverted_index[term]
-            if (len(posting_2) > 0):
-                result = intersection(result, posting_2)
-                # uncomment đoạn sau để chạy intersect có bước nhảy
-                # result = intersection_with_skip_pointer(result, posting_2, 3)
+                item = {}
+                item[term] = inverted_index[term]
+                query_posting.append(item)
+
+        #Sort theo df   
+        sorted_posting = sorted(
+            query_posting, key=lambda x: len(list(x.values())[0]))
+            
+        sorted_query_terms = [list(posting_list.keys())[0]
+                        for posting_list in sorted_posting]
+        choosen_term = sorted_query_terms[0] #Từ đầu tiên
+        result = inverted_index[choosen_term] #Posting đầu tiên
+            
+        rest = sorted_query_terms[1:] #Phần còn lại
+        for term in rest:
+            posting_2 = inverted_index[term]
+            result = intersection(result, posting_2)
+            # uncomment đoạn sau để chạy intersect có bước nhảy
+            # result = intersection_with_skip_pointer(result, posting_2, 3)
         print(query_index+1, result)
 
-# inverted_index = create_inverted_index(docs)
-# sorted_vocabulary = get_sorted_vocabulary(docs)
-# query_with_inv_index(queries, inverted_index)
-# query_with_inv_index_optimize(queries, inverted_index)
+inverted_index = create_inverted_index(docs)
+sorted_vocabulary = get_sorted_vocabulary(docs)
+#query_with_inv_index(queries, inverted_index)
+query_with_inv_index_optimize(queries, inverted_index)

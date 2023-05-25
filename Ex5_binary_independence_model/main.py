@@ -15,8 +15,6 @@ nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
 # Loại bỏ stop words
-
-
 def remove_stopwords(documents):
     filtered_documents = []
     for doc in documents:
@@ -26,21 +24,9 @@ def remove_stopwords(documents):
         filtered_documents.append(' '.join(filtered_words))
     return filtered_documents
 
-# Tìm 1 item trong list 2 chiều, trả về số cột
-
-
-def find_indices_of_value(lst, value):
-    indices = []
-    for i in range(len(lst)):
-        if lst[i] == value:
-            indices.append(i+1)  # index + 1 là STT của tài liệu
-    return indices
-
 ######### GIAI ĐOẠN 1: CHUẨN HÓA INPUT #########
 # Mục tiêu: Xóa bỏ kí tự khoảng trắng thừa, kí tự đặc biệt, số,
 # Biến đổi lowercase
-
-
 def read_file_and_modify(filename):
     with open('./npl/' + filename, 'r') as f:
         text = f.read()
@@ -61,7 +47,6 @@ def read_file_and_modify(filename):
         clean_text[i] = clean_text[i].strip().lower()
     return clean_text
 
-
 ######### GIAI ĐOẠN 2: CHUẨN HÓA DỮ LIỆU #########
 docs = read_file_and_modify("doc-text")
 queries = read_file_and_modify("query-text")
@@ -73,13 +58,13 @@ queries = remove_stopwords(queries)
 
 ######### GIAI ĐOẠN 3: Binary Independence Model ############
 # docs = [
-#     "the quick brown fox jumps over the lazy dog",
-#     "the lazy dog is sleeping",
-#     "the quick fox is quick brown",
-#     "the lazy dog jumps over the fox"
+#     "breakthrough for schizophrenia",
+#     "new schizophrenia drug",
+#     "new approach for treatment of schizophrenia",
+#     "new hopes for schizophrenia patients"
 # ]
 
-# query = "quick brown fox"
+# query = "schizophrenia approach"
 
 def create_inverted_index(docs):
     '''
@@ -96,98 +81,108 @@ def create_inverted_index(docs):
                 inverted_index[word].append(i+1)
     return inverted_index
 
-
-def get_df(inverted_index, term):
-    return len(inverted_index[term])
-
-
-def intersection_d_q(doc, query):
-    return list(set(doc.split()) & set(query.split()))
-
-
-def preweight(inverted_index):
+def calculate_rsv(docs, weights):
     '''
-    Tính toán trọng số BIM ban đầu dựa trên công thức:
-    c(t) = log((N-df + 0.5)/(df+0.5))
+    Tính RSV  
     '''
-    N = len(inverted_index)
-    weight_i_index = []
-    for term in inverted_index:
-        term_df = get_df(inverted_index, term)
-        c_t = math.log((N - term_df + 0.5) / (term_df + 0.5))
-        weight_i_index.append({term: inverted_index[term], "c": c_t})
+    # Tính RSV cho từng tài liệu
+    RSV = []  # List này chứa các RSV của các document
+    for doc_index in range(0, len(docs)):
+        sub_rsv = 0
+        for weight_item in weights:
+            term = list(weight_item.keys())[0]  # lấy ra key là term
+            if term in docs[doc_index]:
+                sub_rsv += weight_item[term]
+        RSV.append(sub_rsv)
+    return RSV
 
-    return weight_i_index
-
-
-def find_term(weighten_inverted_index, term):
+def preweight(query, inverted_index, docs):
     '''
-    Tìm từ trong inverted index, trả về index của term đó,
-    trả về -1 nếu không tìm được
+    Tính RSV ban đầu bằng công thức idf
     '''
-    for index in range(len(weighten_inverted_index)):
-        item_term = list(weighten_inverted_index[index].keys())[0]
-        if (item_term == term):
-            return index
-    return -1
+    query_terms = query.split()
+    query_terms_present = [] #Các từ trong query và có trong tập tài liệu
+    for term in query_terms:
+        if term in inverted_index:
+            query_terms_present.append(term)
+    query_terms_present.sort()
 
+    weights = [] #List các weight
+    N = len(docs)
+    for term in query_terms_present:
+        term_df = len(inverted_index[term])
+        c_t = math.log10((N-term_df+0.5) / (term_df+0.5));
+        weights.append({term: c_t})
+    
+    #Tính RSV cho từng tài liệu
+    RSV = calculate_rsv(docs, weights)
+    
+    return RSV, weights
 
-def query_BIM(weighten_inverted_index, query, docs):
+def compare_two_list(list1, list2):
     '''
-    Tính toán RSV là tổng các weight term trong querry
+    So sánh 2 list
     '''
-    docs_computed_RSV = []
-    for doc_index in range(len(docs)):
-        positive_terms = intersection_d_q(docs[doc_index], query)
-        if (len(positive_terms) == 0):
-            docs_computed_RSV.append({"doc_id": doc_index+1, "rsv": 0})
-        else:
-            rsv = 0.0
-            for term in positive_terms:
-                term_index = find_term(weighten_inverted_index, term)
-                rsv += weighten_inverted_index[term_index]['c']
-            docs_computed_RSV.append({"doc_id": doc_index+1, "rsv": rsv})
-    return docs_computed_RSV
+    if len(list1) != len(list2):
+        return False
+    else:
+        for i in range(len(list1)):
+            if list1[i] != list2[i]:
+                return False
+        return True
 
-
-def sort_by_RSV(evaluated_list):
-    return sorted(evaluated_list, key=lambda x: -x['rsv'])
-
-
-def revelant_feedback_weight(revelants, query, weighten_inverted_index, inverted_index, docs):
+def get_rel_docs(RSV, n_relvelant=1):
     '''
-    Tính lại weight dựa trên feedback
-    input là tập tài liệu liên quan, query, inverted_index đã tính weight
+    Lấy các tài liệu revelant trả về document id
     '''
-    revelant_docs = []
-    # List các tài liệu liên quan
-    for revelant_id in revelants:
-        revelant_docs.append(docs[revelant_id-1])
+    sorted_indexes = sorted(
+        enumerate(RSV), key=lambda x: x[1], reverse=True)
+    
+    top_n_indexes = [index+1 for index, _ in sorted_indexes[:n_relvelant]]
+    return top_n_indexes
 
-    N = len(weighten_inverted_index)
-    N_ref = len(revelants)
+def recompute_weights(RSV, docs, inverted_index, weights, n_relvelant=1):
+    '''
+    Tính lại RSV dựa trên n tài liệu relvelant
+    pi = (si + 0.5) / (S + 1)
+    ri = (ni - si + 0.5) / (N - S + 1)
+    '''
+    new_weights = []
+    S = n_relvelant
+    N = len(docs)
+    rel_docs = get_rel_docs(RSV, n_relvelant)
+    for weight_item in weights:
+        si = 0
+        term = list(weight_item.keys())[0]  # lấy ra key là term
+        posting = inverted_index[term]
 
-    for term in query.split():
-        v_i = 0.0
-        for doc in revelant_docs:
-            if term in doc:
-                v_i += 1
-        pi = (v_i + 0.5) / (N_ref + 1)
-        ui = (get_df(inverted_index, term) - v_i + 0.5) / (N - N_ref + 1)
-        weight = math.log((1-ui)/ui) + math.log(pi/(1-pi))
+        for rel_id in rel_docs:
+            if(rel_id in posting):
+                si += 1
+        pi = (si+0.5) / (S+1)
+        ni = len(posting) #df
+        ri = (ni - si + 0.5) / (N-S+1)
 
-        idx = find_term(weighten_inverted_index, term)
-        weighten_inverted_index[idx]['c'] = weight
+        c_t = math.log10((pi * (1-ri)) / (ri * (1-pi)))
+        new_weights.append({term: c_t})
+    new_RSV = calculate_rsv(docs, new_weights)
+    return new_RSV
 
 
-inverted_index = create_inverted_index(docs)
-weighten_inverted_index = preweight(inverted_index)
+n_rels = 2
+for query_index in range(0, len(queries)):
+    query = queries[query_index]
+    inverted_index = create_inverted_index(docs)
+    RSV, weights = preweight(query, inverted_index, docs)
+    new_RSV = recompute_weights(RSV, docs, inverted_index, weights, n_rels)
+    rel_docs = get_rel_docs(RSV, n_rels)
+    new_rel_docs = get_rel_docs(new_RSV, n_rels)
 
-results = []
-for query_idx in range(len(queries)-1):
-    query = queries[query_idx]
-    evaluated_list = query_BIM(weighten_inverted_index, query, docs)
-    sorted_evaluated_list = sort_by_RSV(evaluated_list)
-    results.append({"query_id": query_idx + 1, "doc_list": sorted_evaluated_list[:5]})
+    while not compare_two_list(rel_docs, new_rel_docs):
+        RSV = new_RSV
+        new_RSV = recompute_weights(RSV, docs, inverted_index, weights, n_rels)
+        rel_docs = get_rel_docs(RSV, n_rels)
+        new_rel_docs = get_rel_docs(new_RSV, n_rels)
 
-print(results)
+    print("Query", query_index+1, ": ", new_rel_docs)
+
